@@ -1,0 +1,67 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: petclinic-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: petclinic_auth_db
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-proot"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  mysql-init:
+    image: mysql:8.4
+    container_name: petclinic-mysql-init
+    depends_on:
+      mysql:
+        condition: service_healthy
+    volumes:
+      - ./mysql_petclinic_seed.sql:/init/seed.sql:ro
+      - ./update_passwords.sql:/init/update_passwords.sql:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+      "mysql -h mysql -uroot -proot < /init/seed.sql &&
+       mysql -h mysql -uroot -proot < /init/update_passwords.sql &&
+       echo 'PetClinic databases initialized successfully.'"
+    restart: "no"
+
+  backend:
+    build:
+      context: ./Backend
+      dockerfile: Dockerfile
+    container_name: petclinic-backend
+    restart: unless-stopped
+    environment:
+      SERVER_PORT: 9090
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/petclinic_auth_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root
+      SPRING_JPA_SHOW_SQL: "false"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      mysql-init:
+        condition: service_completed_successfully
+    ports:
+      - "9090:9090"
+
+  frontend:
+    build:
+      context: ./Frontend
+      dockerfile: Dockerfile
+    container_name: petclinic-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "5173:80"
+
+volumes:
+  mysql_data:
