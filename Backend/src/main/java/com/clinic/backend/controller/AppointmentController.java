@@ -10,6 +10,7 @@ import com.clinic.backend.security.AuthGuard;
 import com.clinic.backend.security.AuthenticatedUser;
 import com.clinic.backend.security.RoleGuard;
 import com.clinic.backend.service.AppointmentService;
+import com.clinic.backend.service.DashboardPermissionService;
 import com.clinic.backend.service.OwnerService;
 import com.clinic.backend.service.PetService;
 import com.clinic.backend.service.VetService;
@@ -29,16 +30,19 @@ public class AppointmentController {
     private final OwnerService ownerService;
     private final PetService petService;
     private final VetService vetService;
+    private final DashboardPermissionService dashboardPermissionService;
     private final AuthGuard authGuard;
     private final RoleGuard roleGuard;
 
     public AppointmentController(AppointmentService appointmentService,
                                  OwnerService ownerService, PetService petService,
-                                 VetService vetService, AuthGuard authGuard, RoleGuard roleGuard) {
+                                 VetService vetService, DashboardPermissionService dashboardPermissionService,
+                                 AuthGuard authGuard, RoleGuard roleGuard) {
         this.appointmentService = appointmentService;
         this.ownerService = ownerService;
         this.petService = petService;
         this.vetService = vetService;
+        this.dashboardPermissionService = dashboardPermissionService;
         this.authGuard = authGuard;
         this.roleGuard = roleGuard;
     }
@@ -50,10 +54,13 @@ public class AppointmentController {
         AuthenticatedUser user = authGuard.requireAuthenticatedUser(request);
         roleGuard.requireRole(user, Role.PET_OWNER, Role.RECEPTIONIST);
         if (user.role() == Role.PET_OWNER) {
+            dashboardPermissionService.requireEnabled(user, "OWNER_TAB_APPOINTMENTS");
             Long currentUserOwnerId = ownerService.getByUserId(user.userId()).getId();
             if (!currentUserOwnerId.equals(body.ownerId())) {
                 throw new UnauthorizedException("Access denied. You can only book appointments for your own profile.");
             }
+        } else {
+            dashboardPermissionService.requireEnabled(user, "RECEPTIONIST_TAB_APPOINTMENTS");
         }
         return toResponse(appointmentService.book(body));
     }
@@ -65,6 +72,13 @@ public class AppointmentController {
             HttpServletRequest request) {
         AuthenticatedUser user = authGuard.requireAuthenticatedUser(request);
         roleGuard.requireRole(user, Role.VET, Role.ADMIN, Role.RECEPTIONIST);
+        if (user.role() == Role.VET) {
+            dashboardPermissionService.requireEnabled(user, date == null ? "VET_TAB_ALL" : "VET_TAB_TODAY");
+        } else if (user.role() == Role.RECEPTIONIST) {
+            dashboardPermissionService.requireEnabled(user, "RECEPTIONIST_TAB_APPOINTMENTS");
+        } else {
+            dashboardPermissionService.requireEnabled(user, "ADMIN_TAB_APPOINTMENTS");
+        }
         return appointmentService.getByVetAndDate(vetId, date).stream().map(this::toResponse).toList();
     }
 
@@ -73,6 +87,13 @@ public class AppointmentController {
             @PathVariable Long vetId, HttpServletRequest request) {
         AuthenticatedUser user = authGuard.requireAuthenticatedUser(request);
         roleGuard.requireRole(user, Role.VET, Role.ADMIN, Role.RECEPTIONIST);
+        if (user.role() == Role.VET) {
+            dashboardPermissionService.requireEnabled(user, "VET_TAB_ALL");
+        } else if (user.role() == Role.RECEPTIONIST) {
+            dashboardPermissionService.requireEnabled(user, "RECEPTIONIST_TAB_APPOINTMENTS");
+        } else {
+            dashboardPermissionService.requireEnabled(user, "ADMIN_TAB_APPOINTMENTS");
+        }
         return appointmentService.getAllByVetId(vetId).stream().map(this::toResponse).toList();
     }
 
@@ -96,6 +117,13 @@ public class AppointmentController {
         if (user.role() == Role.PET_OWNER && !currentUserOwnerId.equals(ownerId)) {
             throw new UnauthorizedException("Access denied. You can only view your own appointments.");
         }
+        if (user.role() == Role.PET_OWNER) {
+            dashboardPermissionService.requireEnabled(user, "OWNER_TAB_APPOINTMENTS");
+        } else if (user.role() == Role.RECEPTIONIST) {
+            dashboardPermissionService.requireEnabled(user, "RECEPTIONIST_TAB_APPOINTMENTS");
+        } else {
+            dashboardPermissionService.requireEnabled(user, "ADMIN_TAB_APPOINTMENTS");
+        }
 
         return appointmentService.getByOwner(ownerId).stream().map(this::toResponse).toList();
     }
@@ -118,11 +146,16 @@ public class AppointmentController {
 
         // [SECURITY FIX] Verify ownership for PET_OWNER before cancelling
         if (user.role() == Role.PET_OWNER) {
+            dashboardPermissionService.requireEnabled(user, "OWNER_TAB_APPOINTMENTS");
             Appointment appointment = appointmentService.getById(id);
             Long currentUserOwnerId = ownerService.getByUserId(user.userId()).getId();
             if (!appointment.getOwnerId().equals(currentUserOwnerId)) {
                 throw new UnauthorizedException("Access denied. You can only cancel your own appointments.");
             }
+        } else if (user.role() == Role.RECEPTIONIST) {
+            dashboardPermissionService.requireEnabled(user, "RECEPTIONIST_TAB_APPOINTMENTS");
+        } else {
+            dashboardPermissionService.requireEnabled(user, "ADMIN_TAB_APPOINTMENTS");
         }
 
         return toResponse(appointmentService.cancel(id));
@@ -134,6 +167,13 @@ public class AppointmentController {
                                             HttpServletRequest request) {
         AuthenticatedUser user = authGuard.requireAuthenticatedUser(request);
         roleGuard.requireRole(user, Role.VET, Role.RECEPTIONIST, Role.ADMIN);
+        if (user.role() == Role.VET) {
+            dashboardPermissionService.requireEnabled(user, "VET_TAB_ALL");
+        } else if (user.role() == Role.RECEPTIONIST) {
+            dashboardPermissionService.requireEnabled(user, "RECEPTIONIST_TAB_APPOINTMENTS");
+        } else {
+            dashboardPermissionService.requireEnabled(user, "ADMIN_TAB_APPOINTMENTS");
+        }
         return toResponse(appointmentService.updateStatus(id, body.status()));
     }
 

@@ -103,11 +103,7 @@ export default function Admin () {
     setLoading(true)
     try {
       const rows = await apiFetch(`${API}/admin/permissions`)
-      const mapped = Object.fromEntries(
-        (rows || [])
-          .filter(r => r.role !== 'ADMIN')
-          .map(r => [r.role, r.permissions || {}])
-      )
+      const mapped = Object.fromEntries((rows || []).map(r => [r.role, r.permissions || {}]))
       setPermissionsByRole(mapped)
       const firstRole = Object.keys(mapped)[0]
       if (firstRole && !mapped[selectedPermissionRole]) setSelectedPermissionRole(firstRole)

@@ -47,14 +47,16 @@ public class AdminController {
         this.roleGuard = roleGuard;
     }
 
-    private void requireAdmin(HttpServletRequest request) {
+    private AuthenticatedUser requireAdmin(HttpServletRequest request) {
         AuthenticatedUser user = authGuard.requireAuthenticatedUser(request);
         roleGuard.requireRole(user, Role.ADMIN);
+        return user;
     }
 
     @GetMapping("/reports/summary")
     public ReportSummaryResponse getSummary(HttpServletRequest request) {
-        requireAdmin(request);
+        AuthenticatedUser user = requireAdmin(request);
+        dashboardPermissionService.requireEnabled(user, "ADMIN_TAB_SUMMARY");
         var appointments = appointmentService.getAll();
         var invoices     = invoiceService.getAll();
         var patients     = patientService.getAll();
@@ -72,7 +74,8 @@ public class AdminController {
 
     @GetMapping("/reports/appointments")
     public List<AppointmentResponse> getAllAppointments(HttpServletRequest request) {
-        requireAdmin(request);
+        AuthenticatedUser user = requireAdmin(request);
+        dashboardPermissionService.requireEnabled(user, "ADMIN_TAB_APPOINTMENTS");
         return appointmentService.getAll().stream().map(a -> {
             String ownerName = ownerService.displayName(ownerService.getById(a.getOwnerId()));
             String petName   = petService.getById(a.getPetId()).getName();
@@ -86,7 +89,8 @@ public class AdminController {
 
     @GetMapping("/reports/invoices")
     public List<InvoiceResponse> getAllInvoices(HttpServletRequest request) {
-        requireAdmin(request);
+        AuthenticatedUser user = requireAdmin(request);
+        dashboardPermissionService.requireEnabled(user, "ADMIN_TAB_INVOICES");
         return invoiceService.getAll().stream()
                 .map(i -> new InvoiceResponse(i.getId(), i.getAppointmentId(), i.getOwnerId(),
                         i.getAmount(), i.getStatus(), i.getIssuedAt(), i.getPaidAt()))
@@ -95,7 +99,8 @@ public class AdminController {
 
     @GetMapping("/users")
     public List<AdminUserResponse> getAllUsers(HttpServletRequest request) {
-        requireAdmin(request);
+        AuthenticatedUser user = requireAdmin(request);
+        dashboardPermissionService.requireEnabled(user, "ADMIN_TAB_USERS");
         return patientService.getAll().stream()
                 .map(p -> new AdminUserResponse(
                         p.getId(), p.getName(), p.getEmail(), p.getPhone(), p.getRole()))
@@ -108,8 +113,8 @@ public class AdminController {
             @Valid @RequestBody UpdateUserRoleRequest body,
             HttpServletRequest request
     ) {
-        AuthenticatedUser currentAdmin = authGuard.requireAuthenticatedUser(request);
-        roleGuard.requireRole(currentAdmin, Role.ADMIN);
+        AuthenticatedUser currentAdmin = requireAdmin(request);
+        dashboardPermissionService.requireEnabled(currentAdmin, "ADMIN_TAB_USERS");
         if (currentAdmin.userId().equals(id)) {
             throw new com.clinic.backend.exception.ConflictException("Admin cannot change their own role.");
         }
@@ -126,7 +131,8 @@ public class AdminController {
 
     @GetMapping("/permissions")
     public List<RolePermissionsResponse> getPermissions(HttpServletRequest request) {
-        requireAdmin(request);
+        AuthenticatedUser user = requireAdmin(request);
+        dashboardPermissionService.requireEnabled(user, "ADMIN_TAB_PERMISSIONS");
         return dashboardPermissionService.getAllByRole().entrySet().stream()
                 .map(entry -> new RolePermissionsResponse(entry.getKey(), entry.getValue()))
                 .toList();
@@ -139,7 +145,8 @@ public class AdminController {
             @Valid @RequestBody UpdatePermissionRequest body,
             HttpServletRequest request
     ) {
-        requireAdmin(request);
+        AuthenticatedUser user = requireAdmin(request);
+        dashboardPermissionService.requireEnabled(user, "ADMIN_TAB_PERMISSIONS");
         dashboardPermissionService.updatePermission(role, permissionKey, body.enabled());
         return new RolePermissionsResponse(role, dashboardPermissionService.getPermissionsForRole(role));
     }

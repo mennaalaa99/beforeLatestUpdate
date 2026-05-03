@@ -8,6 +8,7 @@ import com.clinic.backend.model.Role;
 import com.clinic.backend.security.AuthGuard;
 import com.clinic.backend.security.AuthenticatedUser;
 import com.clinic.backend.security.RoleGuard;
+import com.clinic.backend.service.DashboardPermissionService;
 import com.clinic.backend.service.OwnerService;
 import com.clinic.backend.service.PetService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -22,13 +23,16 @@ public class PetController {
 
     private final PetService petService;
     private final OwnerService ownerService;
+    private final DashboardPermissionService dashboardPermissionService;
     private final AuthGuard authGuard;
     private final RoleGuard roleGuard;
 
     public PetController(PetService petService, OwnerService ownerService,
-                          AuthGuard authGuard, RoleGuard roleGuard) {
+                         DashboardPermissionService dashboardPermissionService,
+                         AuthGuard authGuard, RoleGuard roleGuard) {
         this.petService = petService;
         this.ownerService = ownerService;
+        this.dashboardPermissionService = dashboardPermissionService;
         this.authGuard = authGuard;
         this.roleGuard = roleGuard;
     }
@@ -40,6 +44,7 @@ public class PetController {
         AuthenticatedUser currentUser = authGuard.requireAuthenticatedUser(request);
         roleGuard.requireRole(currentUser, Role.PET_OWNER, Role.ADMIN);
         if (currentUser.role() == Role.PET_OWNER) {
+            dashboardPermissionService.requireEnabled(currentUser, "OWNER_TAB_PROFILE");
             Long myOwnerId = ownerService.getByUserId(currentUser.userId()).getId();
             if (!myOwnerId.equals(body.ownerId())) {
                 throw new com.clinic.backend.exception.UnauthorizedException("You can only add pets to your own profile.");
@@ -53,6 +58,7 @@ public class PetController {
     public List<PetResponse> getByOwner(@PathVariable Long ownerId, HttpServletRequest request) {
         AuthenticatedUser currentUser = authGuard.requireAuthenticatedUser(request);
         if (currentUser.role() == Role.PET_OWNER) {
+            dashboardPermissionService.requireEnabled(currentUser, "OWNER_TAB_PROFILE");
             Long myOwnerId = ownerService.getByUserId(currentUser.userId()).getId();
             if (!myOwnerId.equals(ownerId)) {
                 throw new com.clinic.backend.exception.UnauthorizedException("You can only view your own pets.");
@@ -66,6 +72,7 @@ public class PetController {
         AuthenticatedUser currentUser = authGuard.requireAuthenticatedUser(request);
         Pet pet = petService.getById(id);
         if (currentUser.role() == Role.PET_OWNER) {
+            dashboardPermissionService.requireEnabled(currentUser, "OWNER_TAB_PROFILE");
             Long myOwnerId = ownerService.getByUserId(currentUser.userId()).getId();
             if (!myOwnerId.equals(pet.getOwnerId())) {
                 throw new com.clinic.backend.exception.UnauthorizedException("You can only view your own pets.");
@@ -81,6 +88,7 @@ public class PetController {
         roleGuard.requireRole(currentUser, Role.PET_OWNER, Role.ADMIN);
         Pet existing = petService.getById(id);
         if (currentUser.role() == Role.PET_OWNER) {
+            dashboardPermissionService.requireEnabled(currentUser, "OWNER_TAB_PROFILE");
             Long myOwnerId = ownerService.getByUserId(currentUser.userId()).getId();
             if (!myOwnerId.equals(existing.getOwnerId())) {
                 throw new com.clinic.backend.exception.UnauthorizedException("You can only update your own pets.");
@@ -96,6 +104,7 @@ public class PetController {
         roleGuard.requireRole(currentUser, Role.PET_OWNER, Role.ADMIN);
         Pet existing = petService.getById(id);
         if (currentUser.role() == Role.PET_OWNER) {
+            dashboardPermissionService.requireEnabled(currentUser, "OWNER_TAB_PROFILE");
             Long myOwnerId = ownerService.getByUserId(currentUser.userId()).getId();
             if (!myOwnerId.equals(existing.getOwnerId())) {
                 throw new com.clinic.backend.exception.UnauthorizedException("You can only delete your own pets.");

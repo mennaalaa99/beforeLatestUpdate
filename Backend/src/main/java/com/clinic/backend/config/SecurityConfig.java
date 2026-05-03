@@ -17,25 +17,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
-/**
- * Spring Security Configuration
- *
- * Authorization Matrix:
- * ┌────────────────────────────────┬──────────────────────────────┐
- * │ Endpoint                       │ Required Role                │
- * ├────────────────────────────────┼──────────────────────────────┤
- * │ POST /api/auth/**              │ Public                       │
- * │ GET  /api/vets/**              │ Public                       │
- * │ GET  /api/doctors/**           │ Public                       │
- * │ GET  /actuator/health          │ Public                       │
- * │ POST /api/vets                 │ ADMIN                        │
- * │ POST /api/invoices             │ RECEPTIONIST                 │
- * │ GET  /api/invoices             │ ADMIN                        │
- * │ GET  /api/patients             │ ADMIN                        │
- * │ POST /api/medical-records      │ VET                          │
- * │ Everything else                │ Any authenticated user       │
- * └────────────────────────────────┴──────────────────────────────┘
- */
+
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity

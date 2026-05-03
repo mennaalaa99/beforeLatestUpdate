@@ -33,18 +33,7 @@ public class AuthController {
     private final AuthGuard authGuard;
     private final com.clinic.backend.service.DashboardPermissionService dashboardPermissionService;
 
-    /**
-     * [SECURITY FIX] Cookie Secure flag driven by config.
-     *
-     * Previously hardcoded to secure=false, meaning the JWT token could be
-     * transmitted over plain HTTP in any environment.
-     *
-     * Now reads from application.properties:
-     *   security.cookie.secure=true   (production)
-     *   security.cookie.secure=false  (local dev over HTTP)
-     *
-     * Default is TRUE — production is safe by default, dev opts out explicitly.
-     */
+
     @Value("${security.cookie.secure:true}")
     private boolean cookieSecure;
 

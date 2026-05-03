@@ -8,6 +8,7 @@ import com.clinic.backend.model.Role;
 import com.clinic.backend.security.AuthGuard;
 import com.clinic.backend.security.AuthenticatedUser;
 import com.clinic.backend.security.RoleGuard;
+import com.clinic.backend.service.DashboardPermissionService;
 import com.clinic.backend.service.MedicalRecordService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -20,12 +21,15 @@ import org.springframework.web.bind.annotation.*;
 public class MedicalRecordController {
 
     private final MedicalRecordService medicalRecordService;
+    private final DashboardPermissionService dashboardPermissionService;
     private final AuthGuard authGuard;
     private final RoleGuard roleGuard;
 
     public MedicalRecordController(MedicalRecordService medicalRecordService,
+                                   DashboardPermissionService dashboardPermissionService,
                                    AuthGuard authGuard, RoleGuard roleGuard) {
         this.medicalRecordService = medicalRecordService;
+        this.dashboardPermissionService = dashboardPermissionService;
         this.authGuard = authGuard;
         this.roleGuard = roleGuard;
     }
@@ -37,6 +41,11 @@ public class MedicalRecordController {
                                         @Valid @RequestBody CreateMedicalRecordRequest body) {
         AuthenticatedUser user = authGuard.requireAuthenticatedUser(request);
         roleGuard.requireRole(user, Role.VET, Role.ADMIN);
+        if (user.role() == Role.VET) {
+            dashboardPermissionService.requireEnabled(user, "VET_TAB_RECORDS");
+        } else {
+            dashboardPermissionService.requireEnabled(user, "ADMIN_TAB_APPOINTMENTS");
+        }
         return toResponse(medicalRecordService.create(body));
     }
 
@@ -47,6 +56,11 @@ public class MedicalRecordController {
                                         @Valid @RequestBody com.clinic.backend.controller.UpdateMedicalRecordRequest body) {
         AuthenticatedUser user = authGuard.requireAuthenticatedUser(request);
         roleGuard.requireRole(user, Role.VET, Role.ADMIN);
+        if (user.role() == Role.VET) {
+            dashboardPermissionService.requireEnabled(user, "VET_TAB_RECORDS");
+        } else {
+            dashboardPermissionService.requireEnabled(user, "ADMIN_TAB_APPOINTMENTS");
+        }
         return toResponse(medicalRecordService.update());
     }
 
@@ -65,6 +79,11 @@ public class MedicalRecordController {
                                                 HttpServletRequest request) {
         AuthenticatedUser user = authGuard.requireAuthenticatedUser(request);
         roleGuard.requireRole(user, Role.VET, Role.ADMIN);
+        if (user.role() == Role.VET) {
+            dashboardPermissionService.requireEnabled(user, "VET_TAB_RECORDS");
+        } else {
+            dashboardPermissionService.requireEnabled(user, "ADMIN_TAB_APPOINTMENTS");
+        }
         return medicalRecordService.getByVetId(vetId).stream().map(this::toResponse).toList();
     }
 

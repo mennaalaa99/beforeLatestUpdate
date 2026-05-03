@@ -1,7 +1,9 @@
 package com.clinic.backend.service;
 
 import com.clinic.backend.exception.ConflictException;
+import com.clinic.backend.exception.UnauthorizedException;
 import com.clinic.backend.model.Role;
+import com.clinic.backend.security.AuthenticatedUser;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -12,6 +14,12 @@ import org.springframework.stereotype.Service;
 @Service
 public class DashboardPermissionService {
     private static final List<String> SUPPORTED_KEYS = List.of(
+            "ADMIN_TAB_SUMMARY",
+            "ADMIN_TAB_VETS",
+            "ADMIN_TAB_APPOINTMENTS",
+            "ADMIN_TAB_INVOICES",
+            "ADMIN_TAB_USERS",
+            "ADMIN_TAB_PERMISSIONS",
             "RECEPTIONIST_TAB_APPOINTMENTS",
             "RECEPTIONIST_TAB_OWNERS",
             "RECEPTIONIST_TAB_INVOICES",
@@ -43,7 +51,14 @@ public class DashboardPermissionService {
                         "VET_TAB_ALL", true,
                         "VET_TAB_RECORDS", true
                 ),
-                Role.ADMIN, mapOf()
+                Role.ADMIN, mapOf(
+                        "ADMIN_TAB_SUMMARY", true,
+                        "ADMIN_TAB_VETS", true,
+                        "ADMIN_TAB_APPOINTMENTS", true,
+                        "ADMIN_TAB_INVOICES", true,
+                        "ADMIN_TAB_USERS", true,
+                        "ADMIN_TAB_PERMISSIONS", true
+                )
         );
     }
 
@@ -70,6 +85,19 @@ public class DashboardPermissionService {
             throw new ConflictException("Unsupported permission key: " + permissionKey);
         }
         overrides.computeIfAbsent(role, r -> new ConcurrentHashMap<>()).put(permissionKey, enabled);
+    }
+
+    public boolean isEnabled(Role role, String permissionKey) {
+        if (!SUPPORTED_KEYS.contains(permissionKey)) {
+            return false;
+        }
+        return getPermissionsForRole(role).getOrDefault(permissionKey, false);
+    }
+
+    public void requireEnabled(AuthenticatedUser user, String permissionKey) {
+        if (!isEnabled(user.role(), permissionKey)) {
+            throw new UnauthorizedException("Access denied. Permission is disabled by admin.");
+        }
     }
 
     private static Map<String, Boolean> mapOf(Object... pairs) {
