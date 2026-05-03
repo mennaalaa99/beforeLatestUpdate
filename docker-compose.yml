@@ -4,8 +4,8 @@ services:
     container_name: petclinic-mysql
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: petclinic_auth_db
+      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_DATABASE=petclinic_auth_db
     ports:
       - "3306:3306"
     volumes:
@@ -39,11 +39,15 @@ services:
     container_name: petclinic-backend
     restart: unless-stopped
     environment:
-      SERVER_PORT: 9090
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/petclinic_auth_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
-      SPRING_DATASOURCE_USERNAME: root
-      SPRING_DATASOURCE_PASSWORD: root
-      SPRING_JPA_SHOW_SQL: "false"
+      - SERVER_PORT=9090
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/petclinic_auth_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=root
+      - SPRING_JPA_SHOW_SQL=true
+      - JWT_SECRET=5367566B59703373367639792F423F4528482B4D6251655468576D5A71347437
+      - JWT_EXPIRATION_MS=86400000
+      - SECURITY_COOKIE_SECURE=false
+      - SECURITY_COOKIE_SAMESITE=Lax
     depends_on:
       mysql:
         condition: service_healthy

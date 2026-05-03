@@ -16,6 +16,7 @@ export default function MyAppointments () {
   const [loading,      setLoading]      = useState(true)
   const [error,        setError]        = useState(null)
   const [success,      setSuccess]      = useState(null)
+  const [permissions,  setPermissions]  = useState({})
 
   const [profileForm, setProfileForm] = useState({ name: '', phone: '', address: '', city: '' })
   const [profileSaving, setProfileSaving] = useState(false)
@@ -43,6 +44,18 @@ export default function MyAppointments () {
       }
     }
     if (UserID) loadOwner()
+  }, [UserID])
+
+  useEffect(() => {
+    async function fetchPermissions () {
+      try {
+        const { data } = await axios.get(`${API}/auth/me/permissions`, { withCredentials: true })
+        setPermissions(data?.permissions || {})
+      } catch (err) {
+        setPermissions({})
+      }
+    }
+    if (UserID) fetchPermissions()
   }, [UserID])
 
   // Step 2: جيب الـ appointments لما ownerId يتحدد
@@ -180,7 +193,20 @@ export default function MyAppointments () {
     { key: 'appointments', label: '📅 My Appointments' },
     { key: 'billing',      label: '🧾 Billing' },
     { key: 'profile',      label: '👤 Profile & Pets' },
-  ]
+  ].filter(t => {
+    const map = {
+      appointments: 'OWNER_TAB_APPOINTMENTS',
+      billing: 'OWNER_TAB_BILLING',
+      profile: 'OWNER_TAB_PROFILE'
+    }
+    return permissions[map[t.key]] !== false
+  })
+
+  useEffect(() => {
+    if (tabs.length && !tabs.some(t => t.key === activeTab)) {
+      switchTab(tabs[0].key)
+    }
+  }, [permissions])
 
   return (
     <div className={style.page}>
@@ -200,6 +226,11 @@ export default function MyAppointments () {
           </button>
         ))}
       </div>
+      {tabs.length === 0 && (
+        <div className='mx-4 bg-yellow-100 border border-yellow-300 text-yellow-800 px-4 py-2 rounded-xl mb-4'>
+          No dashboard sections are enabled for PET_OWNER.
+        </div>
+      )}
 
       {/* Notifications */}
       {error   && <div className='mx-4 bg-red-100 border border-red-400 text-red-600 px-4 py-2 rounded-xl mb-4'>{error}</div>}

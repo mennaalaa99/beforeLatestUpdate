@@ -5,6 +5,7 @@ import axios from 'axios'
 
 const API = 'http://localhost:9090/api'
 const ANIMAL_TYPES = ['DOG', 'CAT', 'BIRD', 'RABBIT', 'FISH', 'OTHER']
+const USER_ROLES = ['PET_OWNER', 'VET', 'RECEPTIONIST', 'ADMIN']
 const EMPTY_VET = {
   userId: '', name: '', phone: '', city: '', address: '', specialization: '',
   animalType: 'DOG', consultationFee: '', rating: '', experienceYears: '',
@@ -20,6 +21,9 @@ export default function Admin () {
   const [appointments, setAppointments] = useState([])
   const [invoices,     setInvoices]     = useState([])
   const [users,        setUsers]        = useState([])
+  const [roleDrafts,   setRoleDrafts]   = useState({})
+  const [permissionsByRole, setPermissionsByRole] = useState({})
+  const [selectedPermissionRole, setSelectedPermissionRole] = useState('RECEPTIONIST')
   const [vets,         setVets]         = useState([])
   const [loading,      setLoading]      = useState(false)
   const [error,        setError]        = useState(null)
@@ -66,13 +70,48 @@ export default function Admin () {
   }
   async function fetchUsers () {
     setLoading(true)
-    try { setUsers(await apiFetch(`${API}/admin/users`)) }
+    try {
+      const data = await apiFetch(`${API}/admin/users`)
+      setUsers(data)
+      setRoleDrafts(Object.fromEntries((data || []).map(u => [u.id, u.role])))
+    }
     catch (e) { setError(e.message) } finally { setLoading(false) }
+  }
+
+  async function updateUserRole (userId) {
+    const nextRole = roleDrafts[userId]
+    if (!nextRole) return
+    try {
+      const updated = await apiFetch(`${API}/admin/users/${userId}/role`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: nextRole })
+      })
+      setUsers(prev => prev.map(u => (u.id === userId ? updated : u)))
+      setSuccess(`✅ Role updated for user #${userId}`)
+    } catch (err) {
+      setError(err.message)
+    }
   }
   async function fetchVets () {
     setLoading(true)
     try { setVets(await apiFetch(`${API}/vets`)) }
     catch (e) { setError(e.message) } finally { setLoading(false) }
+  }
+
+  async function fetchPermissions () {
+    setLoading(true)
+    try {
+      const rows = await apiFetch(`${API}/admin/permissions`)
+      const mapped = Object.fromEntries(
+        (rows || [])
+          .filter(r => r.role !== 'ADMIN')
+          .map(r => [r.role, r.permissions || {}])
+      )
+      setPermissionsByRole(mapped)
+      const firstRole = Object.keys(mapped)[0]
+      if (firstRole && !mapped[selectedPermissionRole]) setSelectedPermissionRole(firstRole)
+    } catch (e) { setError(e.message) } finally { setLoading(false) }
   }
 
   function switchTab (tab) {
@@ -83,6 +122,7 @@ export default function Admin () {
     if (tab === 'invoices')     fetchInvoices()
     if (tab === 'users')        fetchUsers()
     if (tab === 'vets')         fetchVets()
+    if (tab === 'permissions')  fetchPermissions()
   }
 
   function openAddForm () { setVetForm(EMPTY_VET); setEditingVet(null); setShowVetForm(true) }
@@ -127,6 +167,18 @@ export default function Admin () {
     finally { setDeleteTarget(null) }
   }
 
+  async function updatePermission (role, key, enabled) {
+    try {
+      const updated = await apiFetch(`${API}/admin/permissions/${role}/${key}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled })
+      })
+      setPermissionsByRole(prev => ({ ...prev, [role]: updated.permissions || {} }))
+      setSuccess(`✅ Permission updated: ${key}`)
+    } catch (err) { setError(err.message) }
+  }
+
   const statCards = summary ? [
     { label: 'Total Users',        value: summary.totalUsers,            color: 'bg-blue-100 text-blue-700' },
     { label: 'Total Appointments', value: summary.totalAppointments,     color: 'bg-green-100 text-green-700' },
@@ -143,6 +195,7 @@ export default function Admin () {
     { key: 'appointments', label: '📅 Appointments' },
     { key: 'invoices',     label: '🧾 Invoices' },
     { key: 'users',        label: '👥 Users' },
+    { key: 'permissions',  label: '🔐 Permissions' },
   ]
   const th = 'px-4 py-3 font-semibold text-left text-sm'
   const td = 'px-4 py-3 text-sm'
@@ -348,7 +401,7 @@ export default function Admin () {
           <div className='bg-white rounded-2xl shadow-sm overflow-x-auto'>
             <table className='w-full text-left'>
               <thead className='bg-[#3276BD] text-white'>
-                <tr>{['ID','Name','Email','Phone'].map(h => <th key={h} className={th}>{h}</th>)}</tr>
+                <tr>{['ID','Name','Email','Phone','Role','Actions'].map(h => <th key={h} className={th}>{h}</th>)}</tr>
               </thead>
               <tbody>
                 {users.map((u, i) => (
@@ -357,11 +410,66 @@ export default function Admin () {
                     <td className={`${td} font-medium`}>{u.name}</td>
                     <td className={td}>{u.email}</td>
                     <td className={td}>{u.phone}</td>
+                    <td className={td}>
+                      <select
+                        value={roleDrafts[u.id] || u.role}
+                        onChange={e => setRoleDrafts(prev => ({ ...prev, [u.id]: e.target.value }))}
+                        disabled={String(u.id) === String(UserData)}
+                        className='bg-white px-2 py-1 border border-[#C5D8EE] rounded-lg text-sm'
+                      >
+                        {USER_ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                      </select>
+                    </td>
+                    <td className={td}>
+                      {String(u.id) === String(UserData)
+                        ? <span className='text-xs text-gray-500'>Current admin</span>
+                        : (
+                          <button
+                            onClick={() => updateUserRole(u.id)}
+                            className='bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-1 rounded-lg text-xs font-bold'
+                          >
+                            Save Role
+                          </button>
+                          )}
+                    </td>
                   </tr>
                 ))}
-                {users.length === 0 && <tr><td colSpan={4} className='text-center py-8 text-gray-400'>No users</td></tr>}
+                {users.length === 0 && <tr><td colSpan={6} className='text-center py-8 text-gray-400'>No users</td></tr>}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {/* PERMISSIONS */}
+        {activeTab === 'permissions' && !loading && (
+          <div className='bg-white rounded-2xl shadow-sm p-5'>
+            <div className='flex items-center gap-3 mb-4'>
+              <label className='text-sm font-semibold text-[#4A6580]'>Select Role</label>
+              <select
+                value={selectedPermissionRole}
+                onChange={e => setSelectedPermissionRole(e.target.value)}
+                className='bg-white px-3 py-2 border border-[#C5D8EE] rounded-xl text-sm'
+              >
+                {Object.keys(permissionsByRole).map(role => (
+                  <option key={role} value={role}>{role}</option>
+                ))}
+              </select>
+            </div>
+            <div className='grid grid-cols-1 md:grid-cols-2 gap-3'>
+              {Object.entries(permissionsByRole[selectedPermissionRole] || {}).map(([key, enabled]) => (
+                <div key={key} className='flex items-center justify-between bg-[#F4F8FF] border border-[#C5D8EE] rounded-xl px-3 py-2'>
+                  <p className='text-sm font-medium text-[#35516f]'>{key}</p>
+                  <button
+                    type='button'
+                    onClick={() => updatePermission(selectedPermissionRole, key, !enabled)}
+                    className={`w-14 h-7 rounded-full transition-colors ${enabled ? 'bg-green-400' : 'bg-gray-300'}`}
+                    title={enabled ? 'Enabled' : 'Disabled'}
+                  >
+                    <span className={`block w-6 h-6 bg-white rounded-full shadow transition-transform mx-0.5 ${enabled ? 'translate-x-7' : 'translate-x-0'}`} />
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>

@@ -1,5 +1,6 @@
 package com.clinic.backend.security;
 
+import com.clinic.backend.service.PatientService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.Cookie;
@@ -26,9 +27,11 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     private static final String BEARER_PREFIX = "Bearer ";
 
     private final JwtService jwtService;
+    private final PatientService patientService;
 
-    public JwtAuthFilter(JwtService jwtService) {
+    public JwtAuthFilter(JwtService jwtService, PatientService patientService) {
         this.jwtService = jwtService;
+        this.patientService = patientService;
     }
 
     @Override
@@ -44,7 +47,9 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
         if (token != null && !token.isBlank()) {
             try {
-                AuthenticatedUser user = jwtService.parseToken(token);
+                AuthenticatedUser tokenUser = jwtService.parseToken(token);
+                var patient = patientService.getById(tokenUser.userId());
+                AuthenticatedUser user = new AuthenticatedUser(patient.getId(), patient.getRole());
 
                 // حط المستخدم كـ request attribute عشان Controllers تقدر توصله
                 request.setAttribute(ATTR_AUTHENTICATED_USER, user);

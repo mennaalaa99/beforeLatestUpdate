@@ -7,10 +7,6 @@ import com.clinic.backend.exception.ResourceNotFoundException;
 import com.clinic.backend.model.Patient;
 import com.clinic.backend.model.Role;
 import com.clinic.backend.repository.PatientRepository;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.HexFormat;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -32,7 +28,7 @@ public class PatientService {
 
     public Patient getByEmail(String email) {
         return patientRepository.findByEmail(email)
-                .orElseThrow(() -> new ResourceNotFoundException("Patient with email " + email + " was not found."));
+                .orElseThrow(() -> new ResourceNotFoundException("Patient not found."));
     }
 
     public Patient register(RegisterRequest request) {
@@ -53,6 +49,11 @@ public class PatientService {
                 .name(request.name()).phone(request.phone()).build());
     }
 
+    public Patient updateRole(Long id, Role role) {
+        Patient current = getById(id);
+        return patientRepository.save(current.toBuilder().role(role).build());
+    }
+
     public void delete(Long id) {
         if (!patientRepository.existsById(id))
             throw new ResourceNotFoundException("Patient with id " + id + " was not found.");
@@ -60,32 +61,17 @@ public class PatientService {
     }
 
     /**
-     * Migration-aware:
-     * 1. BCrypt hash ($2a$ / $2b$) → check with BCrypt
-     * 2. SHA-256 legacy hash       → check + re-hash with BCrypt silently
-     * 3. Placeholder               → return false
+     * [SECURITY FIX] BCrypt-only password check.
+     *
+     * Removed legacy branches:
+     *  - "hashed_*" plain-text comparison — allowed login with seed/dev passwords
+     *  - SHA-256 fallback           — weaker than BCrypt, no longer needed
+     *
+     * All passwords in the system must be BCrypt-encoded ($2a$ / $2b$).
+     * Run a one-off migration script on any remaining legacy rows before deploying.
      */
     public boolean matchesPassword(Patient patient, String rawPassword) {
-        String stored = patient.getPassword();
-        // Seed/dev placeholder passwords like "hashed_vet_001" were used in early iterations.
-        // Treat them as legacy "plain text" and upgrade to BCrypt on successful login.
-        if (stored.startsWith("hashed_")) {
-            if (stored.equals(rawPassword)) {
-                patientRepository.save(patient.toBuilder()
-                        .password(passwordEncoder.encode(rawPassword)).build());
-                return true;
-            }
-            return false;
-        }
-        if (stored.startsWith("$2a$") || stored.startsWith("$2b$"))
-            return passwordEncoder.matches(rawPassword, stored);
-        String sha256 = sha256Hex(rawPassword);
-        if (stored.equals(sha256)) {
-            patientRepository.save(patient.toBuilder()
-                    .password(passwordEncoder.encode(rawPassword)).build());
-            return true;
-        }
-        return false;
+        return passwordEncoder.matches(rawPassword, patient.getPassword());
     }
 
     public void resetPassword(Long id, String oldPassword, String newPassword) {
@@ -94,14 +80,5 @@ public class PatientService {
             throw new ConflictException("Old password is incorrect.");
         patientRepository.save(patient.toBuilder()
                 .password(passwordEncoder.encode(newPassword)).build());
-    }
-
-    private String sha256Hex(String text) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            return HexFormat.of().formatHex(digest.digest(text.getBytes(StandardCharsets.UTF_8)));
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("Could not hash password.", e);
-        }
     }
 }

@@ -37,12 +37,16 @@ public class InvoiceService {
     }
 
     public Invoice pay(Long id) {
-        Invoice invoice = invoiceRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Invoice with id " + id + " was not found."));
+        Invoice invoice = getById(id);
         invoice.setStatus(InvoiceStatus.PAID);
         invoice.setPaidAt(LocalDateTime.now());
         return invoiceRepository.save(invoice);
+    }
+
+    public Invoice getById(Long id) {
+        return invoiceRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Invoice with id " + id + " was not found."));
     }
 
     public List<Invoice> getAll() { return invoiceRepository.findAllByOrderByIdAsc(); }

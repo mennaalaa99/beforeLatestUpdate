@@ -7,10 +7,13 @@ import com.clinic.backend.exception.UnauthorizedException;
 import com.clinic.backend.model.Role;
 import com.clinic.backend.security.AuthGuard;
 import com.clinic.backend.security.AuthenticatedUser;
+import com.clinic.backend.security.JwtService;
+import jakarta.servlet.http.Cookie;
 import com.clinic.backend.service.PatientService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
@@ -22,10 +25,18 @@ public class AccountController {
 
     private final AuthGuard authGuard;
     private final PatientService patientService;
+    private final JwtService jwtService;
 
-    public AccountController(AuthGuard authGuard, PatientService patientService) {
+    @Value("${security.cookie.secure:true}")
+    private boolean cookieSecure;
+
+    @Value("${security.cookie.same-site:Strict}")
+    private String cookieSameSite;
+
+    public AccountController(AuthGuard authGuard, PatientService patientService, JwtService jwtService) {
         this.authGuard = authGuard;
         this.patientService = patientService;
+        this.jwtService = jwtService;
     }
 
     @PutMapping("/{id}")
@@ -79,7 +90,8 @@ public class AccountController {
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<?> logout(HttpServletResponse response) {
+    public ResponseEntity<?> logout(HttpServletRequest request, HttpServletResponse response) {
+        jwtService.revokeToken(extractToken(request));
         removeJwtCookie(response);
         return ResponseEntity.ok("Logged out successfully");
     }
@@ -87,11 +99,26 @@ public class AccountController {
     private void removeJwtCookie(HttpServletResponse response) {
         ResponseCookie cookie = ResponseCookie.from("token", "")
                 .httpOnly(true)
-                .secure(false) // غيّر لـ true في production
+                .secure(cookieSecure)
                 .path("/")
-                .sameSite("None")
+                .sameSite(cookieSameSite)
                 .maxAge(0)
                 .build();
         response.addHeader("Set-Cookie", cookie.toString());
+    }
+
+    private String extractToken(HttpServletRequest request) {
+        if (request.getCookies() != null) {
+            for (Cookie cookie : request.getCookies()) {
+                if ("token".equals(cookie.getName())) {
+                    return cookie.getValue();
+                }
+            }
+        }
+        String header = request.getHeader("Authorization");
+        if (header != null && header.startsWith("Bearer ")) {
+            return header.substring(7).trim();
+        }
+        return null;
     }
 }

@@ -1,15 +1,19 @@
 package com.clinic.backend.controller;
 
+import com.clinic.backend.dto.admin.AdminUserResponse;
 import com.clinic.backend.dto.admin.ReportSummaryResponse;
+import com.clinic.backend.dto.admin.RolePermissionsResponse;
+import com.clinic.backend.dto.admin.UpdateUserRoleRequest;
+import com.clinic.backend.dto.admin.UpdatePermissionRequest;
 import com.clinic.backend.dto.appointment.AppointmentResponse;
 import com.clinic.backend.dto.invoice.InvoiceResponse;
-import com.clinic.backend.dto.patient.PatientResponse;
 import com.clinic.backend.model.*;
 import com.clinic.backend.security.AuthGuard;
 import com.clinic.backend.security.AuthenticatedUser;
 import com.clinic.backend.security.RoleGuard;
 import com.clinic.backend.service.*;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.web.bind.annotation.*;
 
@@ -23,12 +27,14 @@ public class AdminController {
     private final OwnerService ownerService;
     private final PetService petService;
     private final VetService vetService;
+    private final DashboardPermissionService dashboardPermissionService;
     private final AuthGuard authGuard;
     private final RoleGuard roleGuard;
 
     public AdminController(PatientService patientService, AppointmentService appointmentService,
                            InvoiceService invoiceService, OwnerService ownerService,
                            PetService petService, VetService vetService,
+                           DashboardPermissionService dashboardPermissionService,
                            AuthGuard authGuard, RoleGuard roleGuard) {
         this.patientService = patientService;
         this.appointmentService = appointmentService;
@@ -36,6 +42,7 @@ public class AdminController {
         this.ownerService = ownerService;
         this.petService = petService;
         this.vetService = vetService;
+        this.dashboardPermissionService = dashboardPermissionService;
         this.authGuard = authGuard;
         this.roleGuard = roleGuard;
     }
@@ -87,11 +94,53 @@ public class AdminController {
     }
 
     @GetMapping("/users")
-    public List<PatientResponse> getAllUsers(HttpServletRequest request) {
+    public List<AdminUserResponse> getAllUsers(HttpServletRequest request) {
         requireAdmin(request);
         return patientService.getAll().stream()
-                .map(p -> new PatientResponse(p.getId(), p.getName(),
-                        p.getEmail(), p.getPhone(), null))
+                .map(p -> new AdminUserResponse(
+                        p.getId(), p.getName(), p.getEmail(), p.getPhone(), p.getRole()))
                 .toList();
+    }
+
+    @PutMapping("/users/{id}/role")
+    public AdminUserResponse updateUserRole(
+            @PathVariable Long id,
+            @Valid @RequestBody UpdateUserRoleRequest body,
+            HttpServletRequest request
+    ) {
+        AuthenticatedUser currentAdmin = authGuard.requireAuthenticatedUser(request);
+        roleGuard.requireRole(currentAdmin, Role.ADMIN);
+        if (currentAdmin.userId().equals(id)) {
+            throw new com.clinic.backend.exception.ConflictException("Admin cannot change their own role.");
+        }
+
+        Patient updated = patientService.updateRole(id, body.role());
+        return new AdminUserResponse(
+                updated.getId(),
+                updated.getName(),
+                updated.getEmail(),
+                updated.getPhone(),
+                updated.getRole()
+        );
+    }
+
+    @GetMapping("/permissions")
+    public List<RolePermissionsResponse> getPermissions(HttpServletRequest request) {
+        requireAdmin(request);
+        return dashboardPermissionService.getAllByRole().entrySet().stream()
+                .map(entry -> new RolePermissionsResponse(entry.getKey(), entry.getValue()))
+                .toList();
+    }
+
+    @PutMapping("/permissions/{role}/{permissionKey}")
+    public RolePermissionsResponse updatePermission(
+            @PathVariable Role role,
+            @PathVariable String permissionKey,
+            @Valid @RequestBody UpdatePermissionRequest body,
+            HttpServletRequest request
+    ) {
+        requireAdmin(request);
+        dashboardPermissionService.updatePermission(role, permissionKey, body.enabled());
+        return new RolePermissionsResponse(role, dashboardPermissionService.getPermissionsForRole(role));
     }
 }

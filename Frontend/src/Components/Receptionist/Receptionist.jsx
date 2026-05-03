@@ -18,6 +18,7 @@ export default function Receptionist () {
   const [error,        setError]        = useState(null)
   const [success,      setSuccess]      = useState(null)
   const [search,       setSearch]       = useState('')
+  const [permissions,  setPermissions]  = useState({})
 
   // Book appointment form
   const [showBookForm, setShowBookForm] = useState(false)
@@ -35,6 +36,17 @@ export default function Receptionist () {
   }, [UserData, userRole])
 
   useEffect(() => { fetchAppointments(); fetchVets() }, [])
+  useEffect(() => {
+    async function fetchPermissions () {
+      try {
+        const { data } = await axios.get(`${API}/auth/me/permissions`, { withCredentials: true })
+        setPermissions(data?.permissions || {})
+      } catch (err) {
+        setPermissions({})
+      }
+    }
+    fetchPermissions()
+  }, [])
   useEffect(() => {
     if (success) { const t = setTimeout(() => setSuccess(null), 3000); return () => clearTimeout(t) }
   }, [success])
@@ -137,6 +149,13 @@ export default function Receptionist () {
   }
 
   function switchTab (tab) {
+    const tabPermissionMap = {
+      appointments: 'RECEPTIONIST_TAB_APPOINTMENTS',
+      owners: 'RECEPTIONIST_TAB_OWNERS',
+      invoices: 'RECEPTIONIST_TAB_INVOICES'
+    }
+    const required = tabPermissionMap[tab]
+    if (required && permissions[required] === false) return
     setActiveTab(tab); setError(null); setSearch('')
     setShowBookForm(false); setShowInvForm(false)
     if (tab === 'appointments') fetchAppointments()
@@ -153,7 +172,21 @@ export default function Receptionist () {
     { key: 'appointments', label: '📅 Appointments' },
     { key: 'owners',       label: '👤 Pet Owners'  },
     { key: 'invoices',     label: '🧾 Billing'      },
-  ]
+  ].filter(t => {
+    const tabPermissionMap = {
+      appointments: 'RECEPTIONIST_TAB_APPOINTMENTS',
+      owners: 'RECEPTIONIST_TAB_OWNERS',
+      invoices: 'RECEPTIONIST_TAB_INVOICES'
+    }
+    const required = tabPermissionMap[t.key]
+    return permissions[required] !== false
+  })
+
+  useEffect(() => {
+    if (tabs.length && !tabs.some(t => t.key === activeTab)) {
+      switchTab(tabs[0].key)
+    }
+  }, [permissions])
   const th = 'px-4 py-3 font-semibold text-left text-sm'
   const td = 'px-4 py-3 text-sm'
 
@@ -174,6 +207,11 @@ export default function Receptionist () {
             </button>
           ))}
         </div>
+        {tabs.length === 0 && (
+          <div className='bg-yellow-100 border border-yellow-300 text-yellow-800 px-4 py-2 rounded-xl mb-4'>
+            No dashboard sections are enabled for RECEPTIONIST.
+          </div>
+        )}
 
         {error   && <div className='bg-red-100 border border-red-400 text-red-600 px-4 py-2 rounded-xl mb-4'>{error}</div>}
         {success && <div className='bg-green-100 border border-green-400 text-green-700 px-4 py-2 rounded-xl mb-4'>{success}</div>}

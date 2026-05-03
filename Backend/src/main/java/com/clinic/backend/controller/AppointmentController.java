@@ -3,6 +3,7 @@ package com.clinic.backend.controller;
 import com.clinic.backend.dto.appointment.AppointmentResponse;
 import com.clinic.backend.dto.appointment.BookAppointmentRequest;
 import com.clinic.backend.dto.appointment.UpdateAppointmentStatusRequest;
+import com.clinic.backend.exception.UnauthorizedException;
 import com.clinic.backend.model.Appointment;
 import com.clinic.backend.model.Role;
 import com.clinic.backend.security.AuthGuard;
@@ -48,6 +49,12 @@ public class AppointmentController {
                                     @Valid @RequestBody BookAppointmentRequest body) {
         AuthenticatedUser user = authGuard.requireAuthenticatedUser(request);
         roleGuard.requireRole(user, Role.PET_OWNER, Role.RECEPTIONIST);
+        if (user.role() == Role.PET_OWNER) {
+            Long currentUserOwnerId = ownerService.getByUserId(user.userId()).getId();
+            if (!currentUserOwnerId.equals(body.ownerId())) {
+                throw new UnauthorizedException("Access denied. You can only book appointments for your own profile.");
+            }
+        }
         return toResponse(appointmentService.book(body));
     }
 
@@ -69,17 +76,55 @@ public class AppointmentController {
         return appointmentService.getAllByVetId(vetId).stream().map(this::toResponse).toList();
     }
 
+    /**
+     * [SECURITY FIX] Ownership check on GET /appointments/owner/{ownerId}
+     *
+     * Previously any authenticated PET_OWNER could pass any ownerId in the path
+     * and read another owner's full appointment history (IDOR vulnerability).
+     *
+     * Fix: PET_OWNER may only request their own ownerId.
+     * ADMIN and RECEPTIONIST may request any ownerId.
+     */
     @GetMapping("/owner/{ownerId}")
     public List<AppointmentResponse> getOwnerAppointments(
             @PathVariable Long ownerId, HttpServletRequest request) {
         AuthenticatedUser user = authGuard.requireAuthenticatedUser(request);
         roleGuard.requireRole(user, Role.PET_OWNER, Role.ADMIN, Role.RECEPTIONIST);
+
+        // PET_OWNER can only access appointments for their own owner profile id.
+        Long currentUserOwnerId = ownerService.getByUserId(user.userId()).getId();
+        if (user.role() == Role.PET_OWNER && !currentUserOwnerId.equals(ownerId)) {
+            throw new UnauthorizedException("Access denied. You can only view your own appointments.");
+        }
+
         return appointmentService.getByOwner(ownerId).stream().map(this::toResponse).toList();
     }
 
+    /**
+     * [SECURITY FIX] Ownership check on PUT /appointments/{id}/cancel
+     *
+     * Previously any authenticated user (any role) could cancel any appointment
+     * regardless of ownership — just by knowing the appointment ID.
+     *
+     * Fix:
+     *  - PET_OWNER: can only cancel appointments where ownerId == their userId
+     *  - RECEPTIONIST / ADMIN: can cancel any appointment
+     *  - VET: not allowed to cancel (must use /status endpoint instead)
+     */
     @PutMapping("/{id}/cancel")
     public AppointmentResponse cancel(@PathVariable Long id, HttpServletRequest request) {
-        authGuard.requireAuthenticatedUser(request);
+        AuthenticatedUser user = authGuard.requireAuthenticatedUser(request);
+        roleGuard.requireRole(user, Role.PET_OWNER, Role.RECEPTIONIST, Role.ADMIN);
+
+        // [SECURITY FIX] Verify ownership for PET_OWNER before cancelling
+        if (user.role() == Role.PET_OWNER) {
+            Appointment appointment = appointmentService.getById(id);
+            Long currentUserOwnerId = ownerService.getByUserId(user.userId()).getId();
+            if (!appointment.getOwnerId().equals(currentUserOwnerId)) {
+                throw new UnauthorizedException("Access denied. You can only cancel your own appointments.");
+            }
+        }
+
         return toResponse(appointmentService.cancel(id));
     }
 
